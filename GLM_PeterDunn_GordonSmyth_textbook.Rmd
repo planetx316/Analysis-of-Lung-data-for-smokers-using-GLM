@@ -1,0 +1,305 @@
+---
+title: "Analysis of Lung data for smokers"
+author: "Prince John"
+date: "25/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data
+
+The study of 654 youths in East Boston. This data explores the relationship between lung capacity (FEV) and smoking status, age, height and gender. The data is available in the library(GLMsData) as lungcap data (short for lung capcity).
+```{r,warning=FALSE}
+library(GLMsData)
+library(ggplot2)
+library(plotly)
+data("lungcap")
+head(lungcap)
+```
+
+### Data Exploration
+The types or classes of our data is as follows:
+```{r}
+summary(lungcap)
+```
+Its clear that we have two covariates or quantitative explanatory variables, two factor variables 'Gender' and 'Smoke', which are basically categorical variables. We convert the Smoke variable into factors. Gender is a factor, but does not need to be explicitly declared as a factor (using factor()) since the variable Gender is non-numerical 
+
+```{r}
+lungcap$Smoke <- factor(lungcap$Smoke,
+                  levels=c(0, 1),                  # The values of  Smoke
+                  labels=c("Non-smoker","Smoker")) # The labels
+fig1 <- plot_ly(data = lungcap, x = ~Age, y = ~FEV,
+               marker = list(size = 6,
+                             color = 'turquoise',
+                             line = list(color = 'gray',
+                                         width = 2)))
+
+plot( FEV ~ Ht, data=lungcap, main="FEV vs height",
+       xlab="Height (in inches)", ylab="FEV (in L)",
+       las=1, ylim=c(0, 6) )
+plot( FEV ~ Gender, data=lungcap,
+       main="FEV vs gender", ylab="FEV (in L)",
+       las=1, ylim=c(0, 6))
+plot( FEV ~ Smoke,  data=lungcap, main="FEV vs Smoking status",
+       ylab="FEV (in L)", xlab="Smoking status",
+       las=1, ylim=c(0, 6))
+
+```
+From these plots it seems that FEV has a relationship with height, and gender does not seem to be a key factor and smoking status probaly has a little bit of role. However, we need to explore more, as correlation does not necessarily mean causation. To understand more about this, we needs to subset our data to see if there are any relationships. Le't sue the categorical variable "Smoke" to subset the data and see if there is anything more we can find.
+
+```{r}
+plot( FEV ~ Age,
+    data=subset(lungcap, Smoke=="Smoker"),  # Only select smokers
+    main="FEV vs age\nfor smokers",         # \n means `new line'
+    ylab="FEV (in L)", xlab="Age (in years)",
+    ylim=c(0, 6), xlim=c(0, 20), las=1)
+plot( FEV ~ Age,
+    data=subset(lungcap, Smoke=="Non-smoker"),  # Only select smokers
+    main="FEV vs age\nfor non-smokers",         # \n means `new line'
+    ylab="FEV (in L)", xlab="Age (in years)",
+    ylim=c(0, 6), xlim=c(0, 20), las=1)
+```
+Hmm, clearly now, it seems that Smoking Status was a lurking variable and that Age is not necessarily related to FEV by itself but rather seems as if Smoking worsens FEV for those as age increases. Let's also look into interaction plots to see if this exists.
+
+```{r}
+interaction.plot( lungcap$Smoke, lungcap$Gender, lungcap$FEV,
+                   xlab="Smoking status", ylab="FEV (in L)",
+                   main="Mean FEV, by gender\n and smoking status",
+                   trace.label="Gender", las=1)
+interaction.plot( lungcap$Smoke, lungcap$Gender, lungcap$Age,
+                   xlab="Smoking status", ylab="Age (in years)",
+                   main="Mean age, by gender\n and smoking status",
+                   trace.label="Gender", las=1)
+pairs(lungcap[1:3], 
+      main = "Lungcap Pairplot",
+      pch = 21, 
+      bg = c("gray", "red", "yellow")[unclass(lungcap$Smoke)])
+```
+
+
+
+## Models
+
+Let's try out different models here.
+
+### Simple Linear regression
+
+Since now we are moving into regression, we need response variable and explanatory variables. Since we are trying to estimate the FEV size, its only natural to set it as the response variable. A linear regression model can be stated as:
+
+\begin{align}
+var[y_i] &= \sigma^2/w_i \\
+\mu_i &=\beta_0+\sum_{j=1}^p \beta_j x_{ji}
+\end{align}
+
+
+### How do we simulate SLR model?
+To simulate the model:
+
+\begin{align}
+var[y_i] &=3 \\
+\mu_i &=1+ 2 x_{ji}
+\end{align}
+
+
+```{r}
+b0=1
+b1=2
+n=1000
+x=runif(n,-3,3)
+y=rnorm(n,mean=b0+b1*x,sd=3)
+qplot(x,y,alpha=0.5,colour=1)
+```
+```{r}
+model.lm<-lm(FEV~Ht+Gender+Smoke+Age,data = lungcap)
+summary(model.lm)
+```
+```{r}
+#RSS
+df=length(y)-2
+RSS=anova(model.lm)["Residuals", "Sum Sq"]
+s2=RSS/df
+c(df=df,s=sqrt(s2),s2=s2)
+```
+
+
+So the line that we have estimated is $\hat{\mu}=-4.456974 +0.104199 x_1+.157103 x_2+0.087246x_3+0.065509x_4$
+
+```{r}
+scatter.smooth( lungcap$Ht, lungcap$FEV, las=1, col="gray",
+    ylim=c(0, 6), xlim=c(45, 75), # Use similar scales for comparisons
+    main="FEV", xlab="Height (in inches)", ylab="FEV (in L)" )
+scatter.smooth( lungcap$Ht, log(lungcap$FEV), las=1, col="gray",
+    ylim=c(-0.5, 2), xlim=c(45, 75), # Use similar scales for comparisons
+    main="log of FEV", xlab="Height (in inches)", ylab="log of FEV (in L)")
+```
+With the response variable transformed to be linear, it is also useful to try the following model
+
+```{r}
+model.lm2<-lm(log(FEV)~Ht+Gender+Smoke+Age,data = lungcap)
+summary(model.lm2)
+```
+The residual standard error has reduced considerably for this model and understandably. Also:
+
+```{r}
+c('Deviance of Model without log transformation'=deviance(model.lm),'Deviance of Model with log transformation'=deviance(model.lm2))
+```
+However, with the log-transformation on the response variable, we should understand that our model is $\mu=E(\log y)$ or $\mu=E[\log (FEV)]$. The regression coefficients can only be interpreted for their impact on $\mu=E(\log  FEV)$ and not on $\mu=E(y)$. Now, the question is: can we consider $E[\log(FEV)]=\log (E[FEV])?$ No! Because Jensen's inequality says that $E(\log(y))\leqslant \log E(y)$.But it can be used as an approximation, though not ideal.
+
+Now the parameter estimates can be used to approximately interpret the effects of the explanatory variables on $\mu = E[FEV]$ directly. For example, an increase in height $x_1$ of one inch is associated with an increase in the mean FEV by a factor of $exp(0.042796) = 1.044$, assuming all other variables are kept constant.Since this approximation is not ideal we are not continuing with this transformation, for now.
+
+## Checking assumptions of Linearity
+The general form of a linear regression model is given by (2.1) or, assuming normality, by (2.25). The assumptions of the model can be summarized as:
+
+- Lack of outliers: All responses were generated from the same process, so that the same regression model is appropriate for all the observations.
+- Linearity: The linear predictor captures the true relationship between $\mu_i$ and the explanatory variables, and all important explanatory variables are included.
+- Constant variance: The responses $y_i$ have constant variance, apart from known weights $w_i$.
+- Independence: The responses $y_i$ are statistically independent of each other.
+- Distribution: The responses $y_i$ are normally distributed around $\mu_i$.
+
+### Residual analysis
+We are standardizing the residuals so that the pattern becomes clear and visible reducing the noise.
+```{r}
+#raw residuals
+resid.raw <- resid(model.lm)
+#standardized residuals
+resid.std <-rstandard(model.lm)
+c( Raw=var(resid.raw), Standardized=var(resid.std) )
+```
+
+```{r}
+# Plot std residuals against Ht
+scatter.smooth( resid.std~ lungcap$Ht, col="grey",
+    las=1, ylab="Standardized residuals", xlab="Height (inches)")
+```
+
+As you can see clearly, the variance keeps increasing and thus, it is showing a pattern, which shows that the linear model is not enough here.
+
+```{r}
+# partial residual plots
+termplot( model.lm, partial.resid=TRUE, terms="Ht", las=1)
+```
+### Q-Q plots and Normality
+```{r}
+qqnorm( rstandard(model.lm ), las=1, pch=19)
+qqline( rstandard(model.lm) )      # Add reference line
+```
+
+This Q-Q plot shows us that the assumption of normality on the response variable is not true, which we knew all along. Have a look at the histogram of the response variable.
+
+```{r}
+ggplot(lungcap, aes(x=FEV)) + 
+  geom_histogram(color="black", fill="gray")
+```
+### Outliers and Influential obvservations
+There are also studentized residuals. Standardized residuals are computed using $s^2$ which is computed using the entire dataset. An observation with large raw residual is actually used to compute $s^2$ and perhaps inflating its value, in turn making the unusual observation hard to detect. This suggests omitting Observation i from the calculation of $s^2$ when computing the residual for Observation i. These residuals are called Studentized residuals.
+
+The Studentized deleted residual of an observation is calculated by dividing an observation's deleted residual by an estimate of its standard deviation. A deleted residual di is the difference between yi and its fitted value in a model that omits the ith observation from its calculations. The observation is omitted to determine how the model behaves without this potential outlier. If an observation has a large Studentized deleted residual (if its absolute value is greater than 2), it may be an outlier in your data.
+
+Use the deleted residual to help you detect outliers. Deleted residuals are useful because raw residuals might not be acceptable identifiers of outliers when they have nonconstant variance. If residuals with x-values farther from  have greater variance than residuals with x-values closer to  then outliers are harder to detect. All deleted residuals have the same standard deviation.
+
+Each Studentized deleted residual follows the t distribution with (n – 1 – p) degrees of freedom, where p equals the number of terms in the regression model.
+
+Studentized deleted residuals are also called externally Studentized residuals or deleted t residuals.
+```{r,include=FALSE} 
+#rstudent(model.lm)
+n=length(lungcap$FEV)
+p=4
+stder<-sd(rstudent(model.lm))/sqrt(n-p-1) 
+CI=c('lower'=mean(rstudent(model.lm))-qt(0.25,n-p-1)*stder,
+     'upper'=mean(rstudent(model.lm))+qt(0.9755,n-p-1)*stder)
+#This needs some correction
+```
+
+### Influential observations
+Influential observations necessarily have moderate to large residuals, but are not necessarily outliers. Similarly, outliers may or may not be influential.
+
+More specifically, influential observations are those that combine large residuals with high leverage. That is, influential observations are outliers with high leverage. A popular measure of influence for observation i is Cook’s distance. There are several other measures too, which we can calculate altogether using:
+
+```{r}
+lm.IM<-influence.measures(model.lm);
+```
+
+The measures here are DFBETAAS, DFFITS, Covariance ratio CR, Cook's distance, Leverages h. The way we can find if an observation is influential is by:
+
+```{r}
+head(lm.IM$is.inf)
+colSums( lm.IM$is.inf )
+```
+
+We can see 18 observations with high leverage, and 0 observations as influential according to Cooke's distance.
+
+```{r}
+table( rowSums( lm.IM$is.inf[, -8] ) ) # Omitting leverages (col 8)
+```
+Thus, there are 38 observations that are declared influential by one criterion, and 26 in both criterions.
+```{r}
+cd.max <- which.max( cooks.distance(model.lm)) # Largest D
+cd.min <- which.min( cooks.distance(model.lm))   # Smallest D
+c(Min.Cook = cd.min, Max.Cook = cd.max)
+```
+```{r}
+# Cooks' Distance
+plot( cooks.distance( model.lm ), type="h", main="Cook's distance",
+    ylab="D", xlab="Observation number", las=1  )
+# DFFITS
+plot( dffits( model.lm ), type="h", main="DFFITS",
+    ylab="DFFITS", xlab="Observation number", las=1 )
+
+dfbi <- 2
+plot( dfbetas( model.lm )[, dfbi + 1], type="h", main="DFBETAS for beta2",
+    ylab="DFBETAS", xlab="Observation number", las=1 )
+```
+To identify possible outliers
+
+```{r}
+lm.IM$is.inf[c(cd.min, cd.max), ]
+```
+The 39th and the 585th observation is highly influential according to cov.r and dffit. This is not an outlier, but if it was, what would we do with it?
+
+One strategy to evaluate the influence of the outlier is to fit the model to the data with and without the outlier. If the two models produce similar interpretations and conclusions for the researcher, then the outlier is unimportant, whether discarded or not. If the two models are materially different, perhaps other types of models should be considered. At the very least, note the observation and discuss the effect of the observation on the model.
+
+## Fixing the problems
+
+Some of the problems that we faced were that the variance seemed to be increasing. Before we move any further, let's fix that.
+
+### Variance stabilizing transformations
+
+Sometimes a nonlinear relationship between y and x can be fixed by a simple transformation of x. It is often advised to transform the response variable before the covariates as any transformation on the response variable will definitely impact the shape of its relationship covariates. 
+
+```{r}
+LC.log <- update( model.lm, log(FEV) ~ .)
+scatter.smooth( rstandard(LC.log)~fitted(LC.log), las=1, col="grey",
+    ylab="Standardized residuals", xlab="Fitted values",
+    main="Log transformation")
+```
+### Transformation of covariates
+Sometimes, to achieve linearity or to reduce the influence of influential ob- servations, transformations of the covariates are required 
+
+```{r}
+LC.lm.log <- lm(log(FEV)~log(Ht), data=lungcap)
+summary(LC.lm.log)
+colnames(lungcap)
+```
+```{r}
+plot(x=lungcap$Age,y=log(lungcap$FEV),
+     xlab = 'Age',
+     ylab = 'FEV')
+plot(x=lungcap$Ht,y=log(lungcap$FEV),
+     xlab = 'height',
+     ylab = 'FEV')
+
+```
+```{r}
+LC.lm.log <- lm(log(FEV)~log(Ht), data=lungcap)
+summary(LC.lm.log)
+library(splines) # For regression splines
+lm.ns   <- lm( log(FEV) ~ ns(Age, df=3), data=lungcap )
+summary(lm.ns)
+lm.bs   <- lm( log(FEV) ~ bs(Age, df=3), data=lungcap )
+summary(lm.bs)
+```
+  # Conclusions
+  After doing some analysis on this simple dataset, it seems that a simple log transformation of the response variable would do.
